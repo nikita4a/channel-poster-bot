@@ -191,21 +191,16 @@ def show_preview(cid, uid):
         return
     fmt = st.get("fmt", "HTML")
     ents = st.get("entities")
-    # Emojify for HTML mode (convert unicode → <tg-emoji>)
+    # For HTML: emojify + NO entities (Telegram parses HTML + <tg-emoji> natively)
+    # For MarkdownV2: pass entities as-is (custom_emoji entities work)
     if fmt == "HTML":
         txt = emojify(txt, ents)
-    # Adjust entity offsets for preview prefix
+        ents = None  # Let Telegram parse HTML formatting
+    elif fmt != "MarkdownV2":
+        ents = None
     prefix = f"<b>Превью ({fmt or 'Plain'}):</b>\n\n"
-    prefix_len = len(prefix.encode('utf-16-le')) // 2
-    adj_ents = None
-    if ents:
-        adj_ents = []
-        for e in ents:
-            ne = dict(e)
-            ne["offset"] = ne["offset"] + prefix_len
-            adj_ents.append(ne)
     send(cid, prefix + txt,
-         entities=adj_ents, reply_markup=preview_kb(), parse_mode=fmt or None)
+         entities=ents, reply_markup=preview_kb(), parse_mode=fmt or None)
 
 
 def do_pub(cid, uid):
@@ -220,9 +215,12 @@ def do_pub(cid, uid):
         return
     fmt = st.get("fmt", "HTML")
     ents = st.get("entities")
-    # Emojify for HTML mode
+    # For HTML: emojify + NO entities (let Telegram parse HTML)
     if fmt == "HTML":
         txt = emojify(txt, ents)
+        ents = None
+    elif fmt != "MarkdownV2":
+        ents = None
     kb = parse_kb(st.get("kb", ""))
     r = send(ch, txt, entities=ents, reply_markup=kb, parse_mode=fmt or None,
              disable_web_page_preview=True)
