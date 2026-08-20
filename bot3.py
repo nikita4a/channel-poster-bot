@@ -67,6 +67,46 @@ def preview_kb():
          {"text": "❌ Отмена", "callback_data": "cancel"}],
     ]}
 
+# ─── Emoji conversion ───
+# Unicode → premium emoji ID (Lucide pack)
+UNICODE_EMOJI = {
+    "✅": "5211226456100738227", "⭐": "5208511706057184373",
+    "✨": "5210782897648212515", "🔑": "5208723615448602039",
+    "🔐": "5211096541929968385", "🛒": "5210997770567062009",
+    "💵": "5208509635882947404", "💸": "5211010719893460599",
+    "📈": "5208752507693601793", "ℹ️": "5210889687715059785",
+    "🔗": "5210970420215320683", "🔄": "5211051638046887847",
+    "📦": "5208610193952248503", "🏦": "5211219901980643543",
+    "🏷️": "5208444283660571410", "⏳": "5210838989921106328",
+    "🎫": "5211209302001355411", "👤": "5210935566555714476",
+    "🧾": "5211204787990730015", "⏺️": "5210733157631952350",
+    "⏱️": "5208759023158988404", "⚠️": "5208651176530185025",
+    "🔥": "5210782897648212515", "🚀": "5210782897648212515",
+    "💎": "5208511706057184373", "⚡": "5210782897648212515",
+    "💀": "5208651176530185025", "💰": "5208509635882947404",
+    "👍": "5211226456100738227", "👎": "5208651176530185025",
+    "❤️": "5210782897648212515", "🔒": "5211096541929968385",
+    "🔓": "5208723615448602039", "📊": "5208752507693601793",
+    "🔍": "5210889687715059785", "📝": "5211204787990730015",
+    "💬": "5210935566555714476", "📱": "5208610193952248503",
+    "🌐": "5210970420215320683", "☁️": "5208610193952248503",
+    "⚔️": "5208723615448602039", "😈": "5208723615448602039",
+    "🎮": "5208610193952248503", "📡": "5210970420215320683",
+    "🤖": "5208511706057184373", "🧠": "5210889687715059785",
+    "💡": "5210889687715059785", "🎯": "5211226456100738227",
+    "🛡️": "5211096541929968385", "🎪": "5210782897648212515",
+}
+
+def emojify(text, entities):
+    """Convert unicode emoji → <tg-emoji> if no custom_emoji entities present."""
+    if entities:
+        if any(e.get("type") == "custom_emoji" for e in entities):
+            return text  # already has custom_emoji entities
+    for uni, eid in UNICODE_EMOJI.items():
+        if uni in text:
+            text = text.replace(uni, f'<tg-emoji emoji-id="{eid}">{uni}</tg-emoji>')
+    return text
+
 def on_msg(msg):
     cid = msg["chat"]["id"]
     uid = msg["from"]["id"]
@@ -151,8 +191,21 @@ def show_preview(cid, uid):
         return
     fmt = st.get("fmt", "HTML")
     ents = st.get("entities")
-    send(cid, f"<b>Превью ({fmt or 'Plain'}):</b>\n\n{txt}",
-         entities=ents, reply_markup=preview_kb(), parse_mode=fmt or None)
+    # Emojify for HTML mode (convert unicode → <tg-emoji>)
+    if fmt == "HTML":
+        txt = emojify(txt, ents)
+    # Adjust entity offsets for preview prefix
+    prefix = f"<b>Превью ({fmt or 'Plain'}):</b>\n\n"
+    prefix_len = len(prefix.encode('utf-16-le')) // 2
+    adj_ents = None
+    if ents:
+        adj_ents = []
+        for e in ents:
+            ne = dict(e)
+            ne["offset"] = ne["offset"] + prefix_len
+            adj_ents.append(ne)
+    send(cid, prefix + txt,
+         entities=adj_ents, reply_markup=preview_kb(), parse_mode=fmt or None)
 
 
 def do_pub(cid, uid):
@@ -167,6 +220,9 @@ def do_pub(cid, uid):
         return
     fmt = st.get("fmt", "HTML")
     ents = st.get("entities")
+    # Emojify for HTML mode
+    if fmt == "HTML":
+        txt = emojify(txt, ents)
     kb = parse_kb(st.get("kb", ""))
     r = send(ch, txt, entities=ents, reply_markup=kb, parse_mode=fmt or None,
              disable_web_page_preview=True)
