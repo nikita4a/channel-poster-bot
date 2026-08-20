@@ -97,11 +97,28 @@ UNICODE_EMOJI = {
     "🛡️": "5211096541929968385", "🎪": "5210782897648212515",
 }
 
+def _utf16_indices(text, utf16_offset, utf16_length):
+    """Convert UTF-16 offset+length to Python string slice indices."""
+    encoded = text.encode('utf-16-le')
+    # Each UTF-16 code unit is 2 bytes
+    byte_offset = utf16_offset * 2
+    byte_end = byte_offset + utf16_length * 2
+    # Convert back to Python string positions
+    before = encoded[:byte_offset].decode('utf-16-le')
+    chunk = encoded[byte_offset:byte_end].decode('utf-16-le')
+    return len(before), len(before) + len(chunk)
+
 def emojify(text, entities):
-    """Convert unicode emoji → <tg-emoji> if no custom_emoji entities present."""
+    """Convert unicode emoji + custom_emoji entities → <tg-emoji> tags for HTML mode."""
+    # First, convert custom_emoji entities to <tg-emoji> tags in the text
     if entities:
-        if any(e.get("type") == "custom_emoji" for e in entities):
-            return text  # already has custom_emoji entities
+        custom = [(e["offset"], e["length"], e["custom_emoji_id"])
+                  for e in entities if e.get("type") == "custom_emoji"]
+        for utf16_off, utf16_len, eid in sorted(custom, reverse=True):
+            start, end = _utf16_indices(text, utf16_off, utf16_len)
+            emoji_char = text[start:end]
+            text = text[:start] + f'<tg-emoji emoji-id="{eid}">{emoji_char}</tg-emoji>' + text[end:]
+    # Then convert remaining unicode emoji
     for uni, eid in UNICODE_EMOJI.items():
         if uni in text:
             text = text.replace(uni, f'<tg-emoji emoji-id="{eid}">{uni}</tg-emoji>')
